@@ -1262,6 +1262,47 @@ viewport.addEventListener('wheel', function(e) {
   zoomAt(cx, cy, delta);
 }, { passive: false });
 
+// ==================== 手机双指缩放 ====================
+let lastTouchDist = 0;
+let lastTouchMidX = 0;
+let lastTouchMidY = 0;
+
+viewport.addEventListener('touchstart', function(e) {
+  if (e.touches.length === 2) {
+    e.preventDefault();
+    const t1 = e.touches[0], t2 = e.touches[1];
+    lastTouchDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+    lastTouchMidX = (t1.clientX + t2.clientX) / 2;
+    lastTouchMidY = (t1.clientY + t2.clientY) / 2;
+  }
+}, { passive: false });
+
+viewport.addEventListener('touchmove', function(e) {
+  if (e.touches.length === 2) {
+    e.preventDefault();
+    const t1 = e.touches[0], t2 = e.touches[1];
+    const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+    const midX = (t1.clientX + t2.clientX) / 2;
+    const midY = (t1.clientY + t2.clientY) / 2;
+    if (lastTouchDist > 0) {
+      const delta = (dist - lastTouchDist) * 0.01;
+      const rect = viewport.getBoundingClientRect();
+      const cx = midX - rect.left;
+      const cy = midY - rect.top;
+      zoomAt(cx, cy, delta);
+    }
+    lastTouchDist = dist;
+    lastTouchMidX = midX;
+    lastTouchMidY = midY;
+  }
+}, { passive: false });
+
+viewport.addEventListener('touchend', function(e) {
+  if (e.touches.length < 2) {
+    lastTouchDist = 0;
+  }
+}, { passive: false });
+
 // ==================== 鼠标交互（统一处理） ====================
 viewport.addEventListener('mousedown', function(e) {
   if (e.button !== 0) return;
@@ -1679,7 +1720,6 @@ document.getElementById('formModal').addEventListener('click', function(e) {
 
 // ==================== 初始化 ====================
 window.addEventListener('DOMContentLoaded', function() {
-  applyAdminMode();
   loadShops();
   if (img.complete && img.naturalWidth) { renderDots(); fitView(); }
   else img.addEventListener('load', function() { renderDots(); fitView(); });
