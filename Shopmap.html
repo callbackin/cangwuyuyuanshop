@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -240,7 +240,7 @@
 
 <!-- 顶部工具栏 -->
 <div class="toolbar" id="toolbar">
-  <h1>苍梧玉苑商铺销控</h1>
+  <h1 class="admin-only">苍梧玉苑商铺销控</h1>
   <button class="btn-lock locked" id="lockBtn" onclick="toggleAdmin()" title="点击切换管理模式">🔒 展示模式</button>
   <div class="sep admin-only"></div>
   <button class="admin-only" onclick="document.getElementById('imgInput').click()">📷 加载图片</button>
@@ -260,7 +260,7 @@
     <div class="legend-item"><div class="legend-dot" style="background:#52c41a"></div>可售</div>
     <div class="legend-item"><div class="legend-dot" style="background:#ff4d4d"></div>已售</div>
   </div>
-  <span class="tip-text" id="modeTip">滚轮缩放 | 拖拽平移 | Shift+拖拽点位移动</span>
+  <span class="tip-text admin-only" id="modeTip">滚轮缩放 | 拖拽平移 | Shift+拖拽点位移动</span>
 </div>
 
 <!-- 缩放控制 -->
@@ -1732,6 +1732,7 @@ document.getElementById('formModal').addEventListener('click', function(e) {
 
 // ==================== 初始化 ====================
 window.addEventListener('DOMContentLoaded', function() {
+  applyAdminMode();
   loadShops();
   if (img.complete && img.naturalWidth) { renderDots(); fitView(); }
   else img.addEventListener('load', function() { renderDots(); fitView(); });
