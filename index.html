@@ -1,0 +1,943 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>苍梧玉苑商铺电子销控系统</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Microsoft YaHei', Arial, sans-serif; background: #1a1a2e; overflow: hidden; height: 100vh; }
+
+  /* ===== 顶部工具栏 ===== */
+  .toolbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+    background: linear-gradient(135deg, #16213e 0%, #0f3460 100%);
+    padding: 8px 16px; display: flex; align-items: center; gap: 10px;
+    flex-wrap: wrap; box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+    height: 52px;
+  }
+  .toolbar h1 { font-size: 16px; color: #e0e0e0; white-space: nowrap; margin-right: 10px; }
+  .toolbar button {
+    padding: 5px 14px; border: 1px solid rgba(255,255,255,0.15); border-radius: 6px;
+    cursor: pointer; font-size: 13px; transition: all 0.2s; color: #e0e0e0;
+    background: rgba(255,255,255,0.08);
+  }
+  .toolbar button:hover { background: rgba(255,255,255,0.2); }
+  .toolbar button.active { background: #e94560; border-color: #e94560; }
+  .btn-add { border-color: #1890ff !important; }
+  .btn-add.active { background: #ff4d4f !important; border-color: #ff4d4f !important; }
+  .btn-guide.active { background: #13c2c2 !important; border-color: #13c2c2 !important; }
+  .sep { width: 1px; height: 24px; background: rgba(255,255,255,0.15); margin: 0 4px; }
+  .status-legend { display: flex; gap: 12px; align-items: center; margin-left: auto; }
+  .legend-item { display: flex; align-items: center; gap: 4px; font-size: 12px; color: #ccc; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.3); }
+  .tip-text { color: #888; font-size: 11px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-input { display: none; }
+
+  /* ===== 主画布视口 ===== */
+  .viewport {
+    position: fixed; top: 52px; left: 0; right: 0; bottom: 40px;
+    overflow: hidden; cursor: grab;
+    background: #1a1a2e;
+    background-image:
+      radial-gradient(circle at 50% 50%, rgba(255,255,255,0.02) 0%, transparent 70%);
+  }
+  .viewport.panning { cursor: grabbing; }
+  .viewport.adding { cursor: crosshair; }
+
+  /* 画布（可缩放平移） */
+  .canvas {
+    position: absolute; transform-origin: 0 0;
+    will-change: transform;
+  }
+
+  /* 图片容器 */
+  .img-wrap {
+    position: relative; display: inline-block;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+    background: #fff;
+  }
+  .img-wrap img {
+    display: block;
+    user-select: none; -webkit-user-drag: none;
+    pointer-events: none;
+  }
+
+  /* ===== 商铺点位 ===== */
+  .shop-dot {
+    position: absolute; width: 28px; height: 28px;
+    border-radius: 50%; cursor: pointer;
+    transform: translate(-50%, -50%);
+    border: 3px solid #fff;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,0,0,0.2);
+    transition: transform 0.15s, box-shadow 0.15s;
+    z-index: 10;
+  }
+  .shop-dot:hover {
+    transform: translate(-50%, -50%) scale(1.4);
+    z-index: 100;
+    box-shadow: 0 0 16px rgba(255,255,255,0.6), 0 2px 10px rgba(0,0,0,0.5);
+  }
+  .shop-dot.sold { background: #ff4d4d; }
+  .shop-dot.available { background: #52c41a; }
+  .shop-dot.reserved { background: #faad14; }
+  .shop-dot-label {
+    position: absolute; top: -22px; left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.85); color: #fff;
+    padding: 2px 6px; border-radius: 3px;
+    font-size: 11px; white-space: nowrap;
+    pointer-events: none; font-weight: bold;
+  }
+  .shop-dot.dragging { cursor: grabbing; opacity: 0.8; }
+  .shop-dot-status {
+    position: absolute; bottom: -18px; left: 50%;
+    transform: translateX(-50%);
+    font-size: 9px; white-space: nowrap;
+    pointer-events: none;
+    color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+  }
+
+  /* ===== 辅助线 ===== */
+  .guide-h, .guide-v {
+    position: absolute; z-index: 50;
+  }
+  .guide-h {
+    left: 0; width: 100%; height: 20px;
+    cursor: ns-resize;
+    transform: translateY(-50%);
+  }
+  .guide-h .guide-line-visual {
+    position: absolute; left: 0; width: 100%; top: 50%;
+    height: 3px; transform: translateY(-50%);
+    background: repeating-linear-gradient(90deg, #ff0066 0, #ff0066 12px, transparent 12px, transparent 20px);
+    box-shadow: 0 0 6px rgba(255,0,102,0.6);
+  }
+  .guide-v {
+    top: 0; height: 100%; width: 20px;
+    cursor: ew-resize;
+    transform: translateX(-50%);
+  }
+  .guide-v .guide-line-visual {
+    position: absolute; top: 0; height: 100%; left: 50%;
+    width: 3px; transform: translateX(-50%);
+    background: repeating-linear-gradient(180deg, #ff0066 0, #ff0066 12px, transparent 12px, transparent 20px);
+    box-shadow: 0 0 6px rgba(255,0,102,0.6);
+  }
+  .guide-h .guide-label {
+    position: absolute; top: 12px; left: 6px;
+    background: #ff0066; color: #fff;
+    font-size: 11px; padding: 2px 8px; border-radius: 3px;
+    white-space: nowrap; pointer-events: none;
+    font-weight: bold; box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  }
+  .guide-v .guide-label {
+    position: absolute; left: 12px; top: 6px;
+    background: #ff0066; color: #fff;
+    font-size: 11px; padding: 2px 8px; border-radius: 3px;
+    white-space: nowrap; pointer-events: none;
+    font-weight: bold; box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  }
+
+  /* ===== 缩放控制 ===== */
+  .zoom-bar {
+    position: fixed; right: 16px; bottom: 56px;
+    display: flex; flex-direction: column; gap: 4px;
+    z-index: 1100;
+  }
+  .zoom-btn {
+    width: 36px; height: 36px; border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 6px; background: rgba(30,30,60,0.9);
+    color: #ccc; font-size: 16px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s;
+  }
+  .zoom-btn:hover { background: rgba(60,60,120,0.9); color: #fff; }
+  .zoom-pct {
+    text-align: center; font-size: 11px; color: #aaa;
+    padding: 2px 0; font-weight: bold;
+  }
+
+  /* ===== 坐标显示 ===== */
+  .coord-info {
+    position: fixed; left: 16px; bottom: 56px;
+    background: rgba(0,0,0,0.75); color: #0f0;
+    padding: 4px 10px; border-radius: 4px;
+    font-size: 12px; z-index: 1100;
+    font-family: 'Consolas', monospace;
+    display: none;
+  }
+  .coord-info.show { display: block; }
+
+  /* ===== 弹窗通用 ===== */
+  .modal-mask {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.55); z-index: 2000;
+    justify-content: center; align-items: center;
+  }
+  .modal-mask.show { display: flex; }
+  .modal-box {
+    background: #fff; border-radius: 10px; padding: 22px;
+    min-width: 340px; max-width: 440px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+    position: relative; max-height: 88vh; overflow-y: auto;
+  }
+  .modal-close {
+    position: absolute; top: 8px; right: 14px;
+    font-size: 20px; cursor: pointer; color: #aaa;
+    line-height: 1;
+  }
+  .modal-close:hover { color: #333; }
+
+  /* ===== 信息弹窗 ===== */
+  .info-title { font-size: 18px; font-weight: bold; margin-bottom: 14px; color: #333; }
+  .info-row { display: flex; padding: 7px 0; border-bottom: 1px solid #f5f5f5; }
+  .info-row:last-child { border-bottom: none; }
+  .info-lbl { width: 72px; color: #888; font-size: 13px; flex-shrink: 0; }
+  .info-val { flex: 1; font-size: 13px; color: #333; font-weight: 500; }
+  .badge {
+    display: inline-block; padding: 1px 8px; border-radius: 8px;
+    font-size: 11px; color: #fff;
+  }
+  .info-actions { margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end; }
+  .info-actions button { padding: 5px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+
+  /* ===== 表单弹窗 ===== */
+  .form-group { margin-bottom: 12px; }
+  .form-group label { display: block; margin-bottom: 3px; color: #555; font-size: 13px; }
+  .form-group input, .form-group select, .form-group textarea {
+    width: 100%; padding: 6px 10px; border: 1px solid #d9d9d9;
+    border-radius: 4px; font-size: 13px;
+  }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+    border-color: #1890ff; outline: none; box-shadow: 0 0 0 2px rgba(24,144,255,0.15);
+  }
+  .form-actions { margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end; }
+  .form-actions button { padding: 6px 18px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+
+  /* ===== 底部统计 ===== */
+  .stats-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: linear-gradient(135deg, #16213e 0%, #0f3460 100%);
+    padding: 6px 20px; display: flex; justify-content: center; gap: 24px;
+    font-size: 13px; z-index: 1000; height: 40px; align-items: center; color: #ccc;
+  }
+  .stat-num { font-weight: bold; font-size: 16px; }
+  .stat-available .stat-num { color: #52c41a; }
+  .stat-sold .stat-num { color: #ff4d4d; }
+  .stat-reserved .stat-num { color: #faad14; }
+  .stat-total .stat-num { color: #e0e0e0; }
+
+  /* 管理模式相关 */
+  .admin-only { display: inline-block; }
+  .view-mode .admin-only { display: none !important; }
+  body.view-mode .admin-only { display: none !important; }
+  .btn-lock { border-color: #faad14 !important; color: #faad14 !important; }
+  .btn-lock.locked { border-color: #52c41a !important; color: #52c41a !important; }
+</style>
+</head>
+<body>
+
+<!-- 顶部工具栏 -->
+<div class="toolbar" id="toolbar">
+  <h1 class="admin-only">苍梧玉苑商铺销控</h1>
+  <button class="btn-lock locked" id="lockBtn" onclick="toggleAdmin()" title="点击切换管理模式">🔒 展示模式</button>
+  <div class="sep admin-only"></div>
+  <button class="admin-only" onclick="document.getElementById('imgInput').click()">📷 加载图片</button>
+  <input type="file" id="imgInput" class="file-input" accept="image/*" onchange="loadImage(event)">
+  <button class="btn-add admin-only" id="addBtn" onclick="toggleAddMode()">➕ 添加商铺</button>
+  <button class="btn-guide admin-only" id="guideBtn" onclick="toggleGuide()">📏 辅助线</button>
+  <div class="sep admin-only"></div>
+  <button onclick="changeDotSize(-4)" title="圆点缩小">⊖ 点位</button>
+  <span style="color:#ccc;font-size:12px;min-width:30px;text-align:center" id="dotSizeLabel">60</span>
+  <button onclick="changeDotSize(4)" title="圆点放大">⊕ 点位</button>
+  <div class="sep admin-only"></div>
+  <button class="admin-only" onclick="exportData()">📤 导出</button>
+  <button class="admin-only" onclick="document.getElementById('importInput').click()">📥 导入</button>
+  <input type="file" id="importInput" class="file-input" accept=".json" onchange="importData(event)">
+  <button class="admin-only" onclick="clearAll()">🗑️ 清空</button>
+  <div class="status-legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#52c41a"></div>可售</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#ff4d4d"></div>已售</div>
+  </div>
+  <span class="tip-text admin-only" id="modeTip">滚轮缩放 | 拖拽平移 | Shift+拖拽点位移动</span>
+</div>
+
+<!-- 缩放控制 -->
+<div class="zoom-bar">
+  <button class="zoom-btn" onclick="doZoom(0.25)" title="放大">＋</button>
+  <div class="zoom-pct" id="zoomPct">100%</div>
+  <button class="zoom-btn" onclick="doZoom(-0.25)" title="缩小">－</button>
+  <button class="zoom-btn" onclick="resetView()" title="重置">⟲</button>
+  <button class="zoom-btn" style="font-size:12px" onclick="fitView()" title="适应">⊡</button>
+</div>
+
+<!-- 坐标 -->
+<div class="coord-info" id="coordInfo">X: 0%  Y: 0%</div>
+
+<!-- 主视口 -->
+<div class="viewport" id="viewport">
+  <div class="canvas" id="canvas">
+    <div class="img-wrap" id="imgWrap">
+      <img id="floorPlan" src="shopmap.jpg"
+           onerror="this.style.display='none'">
+      <!-- 辅助线 -->
+      <div class="guide-h" id="guideH" style="top:30%;display:none;">
+        <div class="guide-line-visual"></div>
+        <span class="guide-label">H: 30.0%</span>
+      </div>
+      <div class="guide-v" id="guideV" style="left:40%;display:none;">
+        <div class="guide-line-visual"></div>
+        <span class="guide-label">V: 40.0%</span>
+      </div>
+      <!-- 点位容器 -->
+      <div id="dotsLayer"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 信息弹窗 -->
+<div class="modal-mask" id="infoModal">
+  <div class="modal-box">
+    <span class="modal-close" onclick="closeInfo()">&times;</span>
+    <div class="info-title" id="infoTitle">商铺信息</div>
+    <div id="infoBody"></div>
+    <div class="info-actions">
+      <button class="admin-only" style="background:#1890ff;color:#fff" onclick="editShop()">✏️ 编辑</button>
+      <button class="admin-only" style="background:#ff4d4f;color:#fff" onclick="deleteShop()">🗑️ 删除</button>
+      <button style="background:#f0f0f0;color:#333" onclick="closeInfo()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 表单弹窗 -->
+<div class="modal-mask" id="formModal">
+  <div class="modal-box">
+    <span class="modal-close" onclick="closeForm()">&times;</span>
+    <h2 id="formTitle" style="font-size:16px;margin-bottom:14px">添加商铺</h2>
+    <input type="hidden" id="editId">
+    <div class="form-group">
+      <label>商铺编号 *</label>
+      <input type="text" id="fNumber" placeholder="例如：S-001">
+    </div>
+    <div class="form-group">
+      <label>商铺状态 *</label>
+      <select id="fStatus">
+        <option value="available">🟢 可售</option>
+        <option value="sold">🔴 已售</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>建筑面积 (㎡)</label>
+      <input type="number" id="fArea" step="0.1" placeholder="120.5">
+    </div>
+    <div class="form-group">
+      <label>优惠单价 (元/㎡)</label>
+      <input type="number" id="fUnitPrice" placeholder="35000">
+    </div>
+    <div class="form-group">
+      <label>优惠总价 (元)</label>
+      <input type="number" id="fTotalPrice" placeholder="自动计算或手动输入">
+    </div>
+    <div class="form-group">
+      <label>开间 (米)</label>
+      <input type="number" id="fWidth" step="0.1" placeholder="8.5">
+    </div>
+    <div class="form-group">
+      <label>进深 (米)</label>
+      <input type="number" id="fDepth" step="0.1" placeholder="12">
+    </div>
+    <div class="form-group">
+      <label>空腔面积 (㎡)</label>
+      <input type="number" id="fCavityArea" step="0.1" placeholder="15">
+    </div>
+    <div class="form-group">
+      <label>备注</label>
+      <textarea id="fRemark" rows="2" placeholder="其他备注"></textarea>
+    </div>
+    <div class="form-actions">
+      <button style="background:#1890ff;color:#fff" onclick="saveShop()">💾 保存</button>
+      <button style="background:#f0f0f0;color:#333" onclick="closeForm()">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- 统计栏 -->
+<div class="stats-bar">
+  <div class="stat-item stat-available">🟢 可售：<span class="stat-num" id="sAvail">0</span></div>
+  <div class="stat-item stat-sold">🔴 已售：<span class="stat-num" id="sSold">0</span></div>
+  <div class="stat-item stat-total">📊 合计：<span class="stat-num" id="sTotal">0</span></div>
+</div>
+
+<script>
+// ==================== 状态 ====================
+let shops = [];
+
+// ==================== 从 data.json 加载数据 ====================
+function fetchShops() {
+  fetch('data.json?t=' + Date.now())
+    .then(r => r.json())
+    .then(data => {
+      shops = data;
+      renderDots();
+      if (img.complete && img.naturalWidth) fitView();
+    })
+    .catch(err => {
+      console.error('加载数据失败:', err);
+      shops = [];
+      renderDots();
+    });
+}
+let addMode = false;
+let guideOn = false;
+let currentPopupId = null;
+let pendingClickPos = null;
+
+// 视图变换
+let vx = 0, vy = 0, vscale = 1;
+
+// 管理模式
+let isAdmin = false; // 展示模式
+
+// 交互状态
+let action = null; // 'pan' | 'dragH' | 'dragV' | 'dragDot' | null
+let panStart = { x:0, y:0, vx:0, vy:0 };
+let currentDotSize = 60;
+let dragDotId = null;
+
+// ==================== DOM ====================
+const viewport = document.getElementById('viewport');
+const canvas   = document.getElementById('canvas');
+const imgWrap  = document.getElementById('imgWrap');
+const img      = document.getElementById('floorPlan');
+const guideH   = document.getElementById('guideH');
+const guideV   = document.getElementById('guideV');
+const coordEl  = document.getElementById('coordInfo');
+
+// ==================== 视图变换 ====================
+function applyTransform() {
+  canvas.style.transform = `translate(${vx}px, ${vy}px) scale(${vscale})`;
+  document.getElementById('zoomPct').textContent = Math.round(vscale * 100) + '%';
+}
+
+function doZoom(delta) {
+  const rect = viewport.getBoundingClientRect();
+  const cx = rect.width / 2, cy = rect.height / 2;
+  // delta > 0 放大, delta < 0 缩小
+  zoomAt(cx, cy, delta > 0 ? 0.15 : -0.15);
+}
+
+function zoomAt(cx, cy, delta) {
+  const oldScale = vscale;
+  // delta > 0 放大，delta < 0 缩小，缩放比例与手势幅度成正比
+  const factor = delta > 0 ? (1 + delta) : (1 + delta);
+  vscale = Math.max(0.05, Math.min(3, vscale * factor));
+  const ratio = vscale / oldScale;
+  vx = cx - (cx - vx) * ratio;
+  vy = cy - (cy - vy) * ratio;
+  applyTransform();
+}
+
+function resetView() {
+  fitView();
+}
+
+function fitView() {
+  if (!img.naturalWidth) return;
+  const vw = viewport.clientWidth, vh = viewport.clientHeight;
+  const iw = img.naturalWidth, ih = img.naturalHeight;
+  vscale = Math.min(vw / iw, vh / ih) * 0.92;
+  vx = (vw - iw * vscale) / 2;
+  vy = (vh - ih * vscale) / 2;
+  applyTransform();
+}
+
+// 滚轮缩放（以鼠标为中心）
+viewport.addEventListener('wheel', function(e) {
+  e.preventDefault();
+  const rect = viewport.getBoundingClientRect();
+  const cx = e.clientX - rect.left;
+  const cy = e.clientY - rect.top;
+  // deltaY > 0 向下滚 = 缩小
+  const delta = e.deltaY < 0 ? 0.15 : -0.15;
+  zoomAt(cx, cy, delta);
+}, { passive: false });
+
+// ==================== 手机触控（单指平移 + 双指缩放） ====================
+let lastTouchDist = 0;
+let lastTouchMidX = 0;
+let lastTouchMidY = 0;
+let touchPanStart = null;
+
+viewport.addEventListener('touchstart', function(e) {
+  if (e.touches.length === 2) {
+    e.preventDefault();
+    const t1 = e.touches[0], t2 = e.touches[1];
+    lastTouchDist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+    lastTouchMidX = (t1.clientX + t2.clientX) / 2;
+    lastTouchMidY = (t1.clientY + t2.clientY) / 2;
+    touchPanStart = null; // 双指时取消单指平移
+  } else if (e.touches.length === 1) {
+    // 单指平移
+    touchPanStart = { x: e.touches[0].clientX, y: e.touches[0].clientY, vx: vx, vy: vy };
+  }
+}, { passive: false });
+
+viewport.addEventListener('touchmove', function(e) {
+  if (e.touches.length === 2) {
+    e.preventDefault();
+    const t1 = e.touches[0], t2 = e.touches[1];
+    const dist = Math.hypot(t2.clientX - t1.clientX, t2.clientY - t1.clientY);
+    const midX = (t1.clientX + t2.clientX) / 2;
+    const midY = (t1.clientY + t2.clientY) / 2;
+    if (lastTouchDist > 0) {
+      const delta = (dist - lastTouchDist) * 0.01;
+      const rect = viewport.getBoundingClientRect();
+      zoomAt(midX - rect.left, midY - rect.top, delta);
+    }
+    lastTouchDist = dist;
+  } else if (e.touches.length === 1 && touchPanStart) {
+    // 单指平移
+    e.preventDefault();
+    const dx = e.touches[0].clientX - touchPanStart.x;
+    const dy = e.touches[0].clientY - touchPanStart.y;
+    vx = touchPanStart.vx + dx;
+    vy = touchPanStart.vy + dy;
+    applyTransform();
+  }
+}, { passive: false });
+
+viewport.addEventListener('touchend', function(e) {
+  if (e.touches.length < 2) {
+    lastTouchDist = 0;
+  }
+  if (e.touches.length < 1) {
+    touchPanStart = null;
+  }
+}, { passive: false });
+
+// ==================== 鼠标交互（统一处理） ====================
+viewport.addEventListener('mousedown', function(e) {
+  if (e.button !== 0) return;
+
+  // 检查是否点击了辅助线
+  if (guideOn) {
+    if (e.target === guideH || guideH.contains(e.target)) {
+      action = 'dragH';
+      e.preventDefault();
+      return;
+    }
+    if (e.target === guideV || guideV.contains(e.target)) {
+      action = 'dragV';
+      e.preventDefault();
+      return;
+    }
+  }
+
+  // 检查是否点击了商铺点位
+  const dotEl = e.target.closest('.shop-dot');
+  if (dotEl) {
+    const id = dotEl.dataset.id;
+    // 管理模式下按住Shift键，进入拖拽移动模式
+    if (isAdmin && e.shiftKey) {
+      action = 'dragDot';
+      dragDotId = id;
+      dotEl.classList.add('dragging');
+      e.preventDefault();
+      return;
+    }
+    // 否则显示信息弹窗
+    showInfo(id);
+    return;
+  }
+
+  // 添加商铺模式：点击添加（仅管理模式）
+  if (isAdmin && addMode) {
+    const imgRect = img.getBoundingClientRect();
+    const px = (e.clientX - imgRect.left) / imgRect.width * 100;
+    const py = (e.clientY - imgRect.top) / imgRect.height * 100;
+    if (px >= 0 && px <= 100 && py >= 0 && py <= 100) {
+      pendingClickPos = { x: px, y: py };
+      openAddForm();
+    }
+    return;
+  }
+
+  // 否则进入拖拽平移
+  action = 'pan';
+  panStart = { x: e.clientX, y: e.clientY, vx, vy };
+  viewport.classList.add('panning');
+  e.preventDefault();
+});
+
+window.addEventListener('mousemove', function(e) {
+  // 更新坐标显示
+  if (guideOn) {
+    const imgRect = img.getBoundingClientRect();
+    const px = (e.clientX - imgRect.left) / imgRect.width * 100;
+    const py = (e.clientY - imgRect.top) / imgRect.height * 100;
+    if (px >= 0 && px <= 100 && py >= 0 && py <= 100) {
+      coordEl.textContent = `X: ${px.toFixed(1)}%  Y: ${py.toFixed(1)}%`;
+    }
+  }
+
+  if (!action) return;
+
+  if (action === 'pan') {
+    vx = panStart.vx + (e.clientX - panStart.x);
+    vy = panStart.vy + (e.clientY - panStart.y);
+    applyTransform();
+  } else if (action === 'dragH') {
+    const imgRect = img.getBoundingClientRect();
+    const pct = (e.clientY - imgRect.top) / imgRect.height * 100;
+    const clamped = Math.max(0, Math.min(100, pct));
+    guideH.style.top = clamped + '%';
+    guideH.querySelector('.guide-label').textContent = `H: ${clamped.toFixed(1)}%`;
+  } else if (action === 'dragV') {
+    const imgRect = img.getBoundingClientRect();
+    const pct = (e.clientX - imgRect.left) / imgRect.width * 100;
+    const clamped = Math.max(0, Math.min(100, pct));
+    guideV.style.left = clamped + '%';
+    guideV.querySelector('.guide-label').textContent = `V: ${clamped.toFixed(1)}%`;
+  } else if (action === 'dragDot') {
+    const imgRect = img.getBoundingClientRect();
+    const px = (e.clientX - imgRect.left) / imgRect.width * 100;
+    const py = (e.clientY - imgRect.top) / imgRect.height * 100;
+    const clampedX = Math.max(0, Math.min(100, px));
+    const clampedY = Math.max(0, Math.min(100, py));
+    // 实时更新点位位置
+    const dotEl = document.querySelector(`.shop-dot[data-id="${dragDotId}"]`);
+    if (dotEl) {
+      dotEl.style.left = clampedX + '%';
+      dotEl.style.top = clampedY + '%';
+    }
+  }
+});
+
+window.addEventListener('mouseup', function() {
+  if (action === 'dragDot' && dragDotId) {
+    // 保存拖拽后的位置到数据
+    const dotEl = document.querySelector(`.shop-dot[data-id="${dragDotId}"]`);
+    if (dotEl) {
+      const s = shops.find(x => x.id === dragDotId);
+      if (s) {
+        s.x = parseFloat(dotEl.style.left);
+        s.y = parseFloat(dotEl.style.top);
+        saveShops();
+      }
+      dotEl.classList.remove('dragging');
+    }
+    dragDotId = null;
+  }
+  action = null;
+  viewport.classList.remove('panning');
+});
+
+// ==================== 点位大小调节 ====================
+function changeDotSize(delta) {
+  currentDotSize = Math.max(10, Math.min(60, currentDotSize + delta));
+  document.getElementById('dotSizeLabel').textContent = currentDotSize;
+  renderDots();
+}
+
+// ==================== 管理模式切换 ====================
+function toggleAdmin() {
+  if (isAdmin) {
+    // 切到展示模式，需要密码确认
+    const pwd = prompt('请输入锁定密码（留空则无密码保护）：');
+    if (pwd === null) return; // 取消
+    adminPwd = pwd;
+    isAdmin = false;
+  } else {
+    // 切回管理模式，需要密码验证
+    if (adminPwd) {
+      const pwd = prompt('请输入管理密码：');
+      if (pwd !== adminPwd) { alert('密码错误'); return; }
+    }
+    isAdmin = true;
+  }
+  applyAdminMode();
+}
+
+let adminPwd = '';
+
+function applyAdminMode() {
+  const toolbar = document.getElementById('toolbar');
+  const btn = document.getElementById('lockBtn');
+  const tip = document.getElementById('modeTip');
+
+  if (isAdmin) {
+    toolbar.classList.remove('view-mode');
+    document.body.classList.remove('view-mode');
+    btn.textContent = '🔓 管理模式';
+    btn.classList.remove('locked');
+    tip.textContent = '滚轮缩放 | 拖拽平移 | Shift+拖拽点位移动';
+  } else {
+    toolbar.classList.add('view-mode');
+    document.body.classList.add('view-mode');
+    btn.textContent = '🔒 展示模式';
+    btn.classList.add('locked');
+    tip.textContent = '滚轮缩放 | 拖拽平移 | 点击圆点查看详情';
+    // 退出添加模式
+    if (addMode) toggleAddMode();
+    // 退出辅助线
+    if (guideOn) toggleGuide();
+  }
+}
+
+// ==================== 辅助线开关 ====================
+function toggleGuide() {
+  guideOn = !guideOn;
+  const btn = document.getElementById('guideBtn');
+  guideH.style.display = guideOn ? 'block' : 'none';
+  guideV.style.display = guideOn ? 'block' : 'none';
+  coordEl.classList.toggle('show', guideOn);
+  btn.classList.toggle('active', guideOn);
+  btn.textContent = guideOn ? '📏 关闭辅助线' : '📏 辅助线';
+}
+
+// ==================== 添加商铺模式 ====================
+function toggleAddMode() {
+  addMode = !addMode;
+  const btn = document.getElementById('addBtn');
+  btn.classList.toggle('active', addMode);
+  btn.textContent = addMode ? '❌ 取消添加' : '➕ 添加商铺';
+  viewport.classList.toggle('adding', addMode);
+  document.getElementById('modeTip').textContent = addMode
+    ? '点击图上商铺位置添加点位'
+    : '滚轮缩放 | 左键拖拽平移';
+}
+
+// ==================== 图片加载 ====================
+function loadImage(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    img.src = e.target.result;
+    img.style.display = 'block';
+    img.onload = function() { renderDots(); fitView(); };
+  };
+  reader.readAsDataURL(file);
+}
+
+// ==================== 点位渲染 ====================
+function renderDots() {
+  const layer = document.getElementById('dotsLayer');
+  layer.innerHTML = '';
+  const dotSize = currentDotSize;
+  shops.forEach(s => {
+    const d = document.createElement('div');
+    d.className = 'shop-dot ' + s.status;
+    d.style.left = s.x + '%';
+    d.style.top = s.y + '%';
+    d.style.width = dotSize + 'px';
+    d.style.height = dotSize + 'px';
+    d.dataset.id = s.id;
+    const lbl = document.createElement('div');
+    lbl.className = 'shop-dot-label';
+    lbl.textContent = s.number;
+    d.appendChild(lbl);
+    const st = document.createElement('div');
+    st.className = 'shop-dot-status';
+    const statusText = {available:'可售', sold:'已售'};
+    st.textContent = statusText[s.status] || '';
+    d.appendChild(st);
+    layer.appendChild(d);
+  });
+  updateStats();
+}
+
+// ==================== 数据管理 ====================
+function loadShops() {
+  // 数据从 data.json 加载（见下方 fetch 逻辑）
+  renderDots();
+}
+function saveShops() {
+  // 展示版不保存数据
+  updateStats();
+}
+function updateStats() {
+  document.getElementById('sAvail').textContent = shops.filter(s=>s.status==='available').length;
+  document.getElementById('sSold').textContent  = shops.filter(s=>s.status==='sold').length;
+  document.getElementById('sTotal').textContent = shops.length;
+}
+
+// ==================== 表单 ====================
+function openAddForm() {
+  document.getElementById('formTitle').textContent = '添加商铺';
+  document.getElementById('editId').value = '';
+  document.getElementById('fNumber').value = 'S-' + String(shops.length+1).padStart(3,'0');
+  document.getElementById('fStatus').value = 'available';
+  document.getElementById('fArea').value = '';
+  document.getElementById('fUnitPrice').value = '';
+  document.getElementById('fTotalPrice').value = '';
+  document.getElementById('fWidth').value = '';
+  document.getElementById('fDepth').value = '';
+  document.getElementById('fCavityArea').value = '';
+  document.getElementById('fRemark').value = '';
+  document.getElementById('formModal').classList.add('show');
+}
+
+function closeForm() {
+  document.getElementById('formModal').classList.remove('show');
+}
+
+function saveShop() {
+  const num = document.getElementById('fNumber').value.trim();
+  if (!num) { alert('请输入商铺编号'); return; }
+  const st = document.getElementById('fStatus').value;
+  const area = parseFloat(document.getElementById('fArea').value) || 0;
+  const up = parseFloat(document.getElementById('fUnitPrice').value) || 0;
+  let tp = parseFloat(document.getElementById('fTotalPrice').value) || 0;
+  if (area > 0 && up > 0 && tp === 0) tp = Math.round(area * up);
+
+  const eid = document.getElementById('editId').value;
+  if (eid) {
+    const i = shops.findIndex(s => s.id === eid);
+    if (i >= 0) {
+      Object.assign(shops[i], {
+        number: num, status: st, area, unitPrice: up, totalPrice: tp,
+        width: parseFloat(document.getElementById('fWidth').value) || 0,
+        depth: parseFloat(document.getElementById('fDepth').value) || 0,
+        cavityArea: parseFloat(document.getElementById('fCavityArea').value) || 0,
+        remark: document.getElementById('fRemark').value,
+      });
+    }
+  } else {
+    shops.push({
+      id: 's' + Date.now(), number: num, status: st,
+      area, unitPrice: up, totalPrice: tp,
+      width: parseFloat(document.getElementById('fWidth').value) || 0,
+      depth: parseFloat(document.getElementById('fDepth').value) || 0,
+      cavityArea: parseFloat(document.getElementById('fCavityArea').value) || 0,
+      remark: document.getElementById('fRemark').value,
+      x: pendingClickPos.x, y: pendingClickPos.y,
+    });
+    // 添加后退出添加模式
+    addMode = false;
+    const btn = document.getElementById('addBtn');
+    btn.classList.remove('active');
+    btn.textContent = '➕ 添加商铺';
+    viewport.classList.remove('adding');
+    document.getElementById('modeTip').textContent = '滚轮缩放 | 左键拖拽平移';
+  }
+  saveShops(); renderDots(); closeForm();
+}
+
+// 自动算总价
+document.getElementById('fArea').addEventListener('input', calcTotal);
+document.getElementById('fUnitPrice').addEventListener('input', calcTotal);
+function calcTotal() {
+  const a = parseFloat(document.getElementById('fArea').value) || 0;
+  const u = parseFloat(document.getElementById('fUnitPrice').value) || 0;
+  if (a > 0 && u > 0) document.getElementById('fTotalPrice').value = Math.round(a * u);
+}
+
+// ==================== 信息弹窗 ====================
+function showInfo(id) {
+  const s = shops.find(x => x.id === id);
+  if (!s) return;
+  currentPopupId = id;
+
+  const badge = {
+    available: '<span class="badge" style="background:#52c41a">🟢 可售</span>',
+    sold:      '<span class="badge" style="background:#ff4d4d">🔴 已售</span>',
+  };
+
+  let html = `<div class="info-row"><div class="info-lbl">状态</div><div class="info-val">${badge[s.status]||s.status}</div></div>`;
+  if (s.area)      html += row('建筑面积', s.area + ' ㎡');
+  if (s.unitPrice) html += row('优惠单价', s.unitPrice.toLocaleString() + ' 元/㎡');
+  if (s.totalPrice)html += row('优惠总价', `<b style="color:#e94560">${s.totalPrice.toLocaleString()} 元</b>`);
+  if (s.width)     html += row('开间', s.width + ' 米');
+  if (s.depth)     html += row('进深', s.depth + ' 米');
+  if (s.cavityArea)html += row('空腔面积', s.cavityArea + ' ㎡');
+  if (s.remark)    html += row('备注', s.remark);
+
+
+  document.getElementById('infoTitle').textContent = s.number;
+  document.getElementById('infoBody').innerHTML = html;
+  document.getElementById('infoModal').classList.add('show');
+}
+function row(l,v) { return `<div class="info-row"><div class="info-lbl">${l}</div><div class="info-val">${v}</div></div>`; }
+
+function closeInfo() {
+  document.getElementById('infoModal').classList.remove('show');
+  currentPopupId = null;
+}
+
+function editShop() {
+  const s = shops.find(x => x.id === currentPopupId);
+  if (!s) return;
+  closeInfo();
+  document.getElementById('formTitle').textContent = '编辑 - ' + s.number;
+  document.getElementById('editId').value = s.id;
+  document.getElementById('fNumber').value = s.number;
+  document.getElementById('fStatus').value = s.status;
+  document.getElementById('fArea').value = s.area || '';
+  document.getElementById('fUnitPrice').value = s.unitPrice || '';
+  document.getElementById('fTotalPrice').value = s.totalPrice || '';
+  document.getElementById('fWidth').value = s.width || '';
+  document.getElementById('fDepth').value = s.depth || '';
+  document.getElementById('fCavityArea').value = s.cavityArea || '';
+  document.getElementById('fRemark').value = s.remark || '';
+  document.getElementById('formModal').classList.add('show');
+}
+
+function deleteShop() {
+  const s = shops.find(x => x.id === currentPopupId);
+  if (!s || !confirm('确定删除「' + s.number + '」？')) return;
+  shops = shops.filter(x => x.id !== currentPopupId);
+  saveShops(); renderDots(); closeInfo();
+}
+
+// ==================== 导入导出 ====================
+function exportData() {
+  const blob = new Blob([JSON.stringify(shops, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `苍梧玉苑销控_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function importData(event) {
+  const f = event.target.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = function(e) {
+    try {
+      const d = JSON.parse(e.target.result);
+      if (!Array.isArray(d)) { alert('格式错误'); return; }
+      if (confirm(`导入 ${d.length} 条，覆盖当前数据？\n取消则追加`)) shops = d;
+      else shops = shops.concat(d);
+      saveShops(); renderDots();
+    } catch(err) { alert('解析失败: ' + err.message); }
+  };
+  r.readAsText(f);
+  event.target.value = '';
+}
+
+function clearAll() {
+  if (!confirm('确定清空所有数据？')) return;
+  shops = []; saveShops(); renderDots();
+}
+
+// ==================== 弹窗外部关闭 ====================
+document.getElementById('infoModal').addEventListener('click', function(e) {
+  if (e.target === this) closeInfo();
+});
+document.getElementById('formModal').addEventListener('click', function(e) {
+  if (e.target === this) closeForm();
+});
+
+// ==================== 初始化 ====================
+window.addEventListener('DOMContentLoaded', function() {
+  applyAdminMode();
+  fetchShops();
+  if (img.complete && img.naturalWidth) { renderDots(); fitView(); }
+  else img.addEventListener('load', function() { renderDots(); fitView(); });
+});
+</script>
+</body>
+</html>
